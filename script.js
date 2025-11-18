@@ -247,9 +247,9 @@
     }
 
     function openPeriodSelector(emp){
-      const start = prompt('Digite data de início (YYYY-MM-DD):');
+      const start = prompt('Digite data de início (DD-MM-YYYY):');
       if(!start) return;
-      const end = prompt('Digite data de fim (YYYY-MM-DD) — para semanal o final deve ser domingo (YYYY-MM-DD):');
+      const end = prompt('Digite data de fim (DD-MM-YYYY) — para semanal o final deve ser domingo (DD-MM-YYYY):');
       if(!end) return;
       const s = new Date(start + 'T00:00:00'), e = new Date(end + 'T00:00:00');
       if(isNaN(s.getTime()) || isNaN(e.getTime())) return alert('Formato de data inválido.');
