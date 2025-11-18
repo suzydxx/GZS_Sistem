@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Configurações - GZS Manager</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <header class="topbar"><div class="header-texts"><div class="h1">Configurações</div><div class="h2">Gelo Zona Sul</div></div></header>
+  <main class="main">
+    <div class="card">
+      <h3>Configurações do sistema</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label>Empresa</label><input id="cEmpresa" class="input"></div>
+        <div><label>E-mail relatórios</label><input id="cEmail" class="input"></div>
+        <div><label>Usuário admin</label><input id="cUser" class="input"></div>
+        <div><label>Senha admin</label><input id="cPass" class="input" type="password"></div>
+      </div>
+      <h4 style="margin-top:12px">Valores</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label>Venda de folga (R$)</label><input id="cSell" class="input"></div>
+        <div><label>Alimentação (R$ por dia)</label><input id="cFood" class="input"></div>
+        <div><label>Desconto atraso (R$)</label><input id="cLate" class="input"></div>
+        <div><label>Limite atraso (HH:MM)</label><input id="cLateLimit" class="input"></div>
+      </div>
+      <div style="margin-top:8px">
+        <button id="saveCfg" class="btn">Salvar</button>
+        <button id="exportCfg" class="btn secondary">Exportar backup</button>
+        <button id="restoreDefault" class="btn">Restaurar padrões</button>
+      </div>
+    </div>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>
