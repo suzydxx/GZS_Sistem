@@ -2,7 +2,7 @@
   GZS Manager - script.js
   Local system for desktop use. Login: gelozonasul / 1234
   Stores data in localStorage under key 'gzs_manager_v3'
-  Atualização: adiciona "desconto extra" por dia (campo descExtra) e inclui no cálculo e relatório.
+  Atualização: adiciona "desconto extra" por dia (campo descExtra) com motivo (descReason) e inclui relatório detalhado de descontos.
 */
 (function(){
   const LS_KEY = 'gzs_manager_v3';
@@ -59,9 +59,9 @@
           const mk = monthKey();
           store.records[mk] = store.records[mk] || {};
           store.records[mk]['e1'] = store.records[mk]['e1'] || {};
-          // incluí descExtra nos defaults
-          store.records[mk]['e1']['1'] = { entry:'08:00', lunchOut:'12:00', lunchIn:'13:00', folga:false, sold:false, vale:0, descExtra:0 };
-          store.records[mk]['e1']['2'] = { entry:'08:25', lunchOut:'12:00', lunchIn:'13:00', folga:false, sold:false, vale:0, descExtra:0 };
+          // incluí descExtra e descReason nos defaults
+          store.records[mk]['e1']['1'] = { entry:'08:00', lunchOut:'12:00', lunchIn:'13:00', folga:false, sold:false, vale:0, descExtra:0, descReason:'' };
+          store.records[mk]['e1']['2'] = { entry:'08:25', lunchOut:'12:00', lunchIn:'13:00', folga:false, sold:false, vale:0, descExtra:0, descReason:'' };
           saveStore(store);
           window.location.href = 'painel.html';
         });
@@ -166,12 +166,14 @@
       if(emp.payType === 'Semanal') html += `<button id="btnChoosePeriod" class="btn">Escolher Período Semanal</button>`;
       if(emp.payType === 'Quinzenal') html += `<button id="btnChoosePeriod" class="btn">Escolher Período Quinzenal</button>`;
       html += `<button id="btnGenReport" class="btn secondary">Gerar Relatório (abrir/print)</button>`;
+      // botão novo para detalhes de descontos
+      html += `<button id="btnDiscounts" class="btn">Detalhes Descontos</button>`;
       html += `</div>`;
 
-      // Adicionei coluna "Desc. Extra" (input) mantendo td-desc para desconto por atraso
-      html += `<table class="table"><thead><tr><th>Dia</th><th>Entrada</th><th>Saída Almoço</th><th>Volta Almoço</th><th>Folga</th><th>Vendeu</th><th>Vales (R$)</th><th>Desc. Extra (R$)</th><th>Desconto</th></tr></thead><tbody>`;
+      // Adicionei coluna "Desc. Extra" e "Motivo" (descReason), mantendo td-desc para desconto por atraso
+      html += `<table class="table"><thead><tr><th>Dia</th><th>Entrada</th><th>Saída Almoço</th><th>Volta Almoço</th><th>Folga</th><th>Vendeu</th><th>Vales (R$)</th><th>Desc. Extra (R$)</th><th>Motivo</th><th>Desconto</th></tr></thead><tbody>`;
       for(let d=1; d<=31; d++){
-        const r = rec[String(d)] || {entry:'', lunchOut:'', lunchIn:'', folga:false, sold:false, vale:0, descExtra:0};
+        const r = rec[String(d)] || {entry:'', lunchOut:'', lunchIn:'', folga:false, sold:false, vale:0, descExtra:0, descReason:''};
         html += `<tr>
           <td>${d}</td>
           <td><input class="inp-time entry" data-day="${d}" value="${r.entry||''}"></td>
@@ -181,6 +183,7 @@
           <td style="text-align:center"><input type="checkbox" class="chk-sold" data-day="${d}" ${r.sold? 'checked':''}></td>
           <td><input class="inp-time vale" data-day="${d}" value="${r.vale||0}" type="number" min="0" step="0.01"></td>
           <td><input class="inp-time descExtra" data-day="${d}" value="${r.descExtra||0}" type="number" min="0" step="0.01"></td>
+          <td><input class="inp-text descReason" data-day="${d}" value="${r.descReason||''}" type="text" placeholder="motivo (opcional)"></td>
           <td class="td-desc" data-day="${d}">R$ 0,00</td>
         </tr>`;
       }
@@ -206,6 +209,7 @@
       document.querySelectorAll('.chk-folga, .chk-sold').forEach(cb=> cb.addEventListener('change', (e)=> { saveField(emp.id, e.target.dataset.day); }));
       document.querySelectorAll('.vale').forEach(v=> v.addEventListener('change', (e)=> { saveField(emp.id, e.target.dataset.day); }));
       document.querySelectorAll('.descExtra').forEach(v=> v.addEventListener('change', (e)=> { saveField(emp.id, e.target.dataset.day); }));
+      document.querySelectorAll('.descReason').forEach(v=> v.addEventListener('blur', (e)=> { saveField(emp.id, e.target.dataset.day); }));
 
       el('payType').addEventListener('change', ()=> { emp.payType = el('payType').value; saveStore(store); renderPoints(emp); });
       el('foodMode').addEventListener('change', ()=> { emp.foodMode = el('foodMode').value; saveStore(store); });
@@ -214,6 +218,8 @@
 
       if(el('btnChoosePeriod')) el('btnChoosePeriod').addEventListener('click', ()=> openPeriodSelector(emp));
       el('btnGenReport').addEventListener('click', ()=> { const p = store.periods[monthKey()]; const period = p && p[emp.id] ? p[emp.id] : null; if(!period) return alert('Escolha primeiro o período (semana/quinzena) para gerar relatório.'); const totals = calcTotalsForGivenRange(emp.id, period.start, period.end); openReport(emp, period.start, period.end, totals); });
+
+      if(el('btnDiscounts')) el('btnDiscounts').addEventListener('click', ()=> { const p = store.periods[monthKey()]; const period = p && p[emp.id] ? p[emp.id] : null; if(!period) return alert('Escolha primeiro o período (semana/quinzena) para ver detalhes dos descontos.'); openDiscountDetails(emp, period.start, period.end); });
 
       for(let d=1; d<=31; d++) calcRow(emp.id, d);
       const p = store.periods[monthKey()] || {};
@@ -239,8 +245,10 @@
       const vale = valeEl ? Number(valeEl.value) || 0 : 0;
       const descExtraEl = document.querySelector('.descExtra[data-day="'+day+'"]');
       const descExtra = descExtraEl ? Number(descExtraEl.value) || 0 : 0;
+      const descReasonEl = document.querySelector('.descReason[data-day="'+day+'"]');
+      const descReason = descReasonEl ? (descReasonEl.value || '') : '';
 
-      store.records[mk][empId][String(day)] = { entry, lunchOut, lunchIn, folga, sold, vale, descExtra };
+      store.records[mk][empId][String(day)] = { entry, lunchOut, lunchIn, folga, sold, vale, descExtra, descReason };
       saveStore(store);
       calcRow(empId, day);
       const p = store.periods[mk] && store.periods[mk][empId] ? store.periods[mk][empId] : null;
@@ -319,15 +327,15 @@
       let html = `<html><head><meta charset="utf-8"><title>Relatório ${emp.name}</title><link rel="stylesheet" href="style.css"></head><body><div style="padding:20px">`;
       html += `<h2>${store.config.empresa}</h2><h3>Relatório: ${emp.name}</h3>`;
       html += `<div>Período: ${startStr} até ${endStr}</div>`;
-      // Cabeçalho com nova coluna "Desc. Extra"
-      html += `<table border="1" cellpadding="6" style="border-collapse:collapse;margin-top:10px"><thead><tr><th>Dia</th><th>Entrada</th><th>Saída Almoço</th><th>Volta</th><th>Folga</th><th>Vendeu</th><th>Vales</th><th>Desc. Extra</th><th>Desconto (Atraso)</th></tr></thead><tbody>`;
+      // Cabeçalho com nova coluna "Desc. Extra" e "Motivo"
+      html += `<table border="1" cellpadding="6" style="border-collapse:collapse;margin-top:10px"><thead><tr><th>Dia</th><th>Entrada</th><th>Saída Almoço</th><th>Volta</th><th>Folga</th><th>Vendeu</th><th>Vales</th><th>Desc. Extra</th><th>Motivo</th><th>Desconto (Atraso)</th></tr></thead><tbody>`;
       const start = new Date(startStr + 'T00:00:00'), end = new Date(endStr + 'T00:00:00');
       const rec = (store.records[monthKey(start)] && store.records[monthKey(start)][emp.id]) || {};
       for(let d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
         const daynum = d.getDate();
         const r = rec[String(daynum)] || {};
         const descAtraso = (r.entry && parseMin(r.entry) >= parseMin(store.config.settings.lateLimit)) ? store.config.settings.latePenalty : 0;
-        html += `<tr><td>${daynum}</td><td>${r.entry||''}</td><td>${r.lunchOut||''}</td><td>${r.lunchIn||''}</td><td>${r.folga? 'Sim':''}</td><td>${r.sold? 'Sim':''}</td><td>R$ ${(Number(r.vale||0)).toFixed(2)}</td><td>R$ ${(Number(r.descExtra||0)).toFixed(2)}</td><td>R$ ${Number(descAtraso).toFixed(2)}</td></tr>`;
+        html += `<tr><td>${daynum}</td><td>${r.entry||''}</td><td>${r.lunchOut||''}</td><td>${r.lunchIn||''}</td><td>${r.folga? 'Sim':''}</td><td>${r.sold? 'Sim':''}</td><td>R$ ${(Number(r.vale||0)).toFixed(2)}</td><td>R$ ${(Number(r.descExtra||0)).toFixed(2)}</td><td>${(r.descReason||'')}</td><td>R$ ${Number(descAtraso).toFixed(2)}</td></tr>`;
       }
       html += `</tbody></table>`;
       html += `<h4>Resumo</h4><div>Base: ${money(totals.base)}</div><div>Descontos por atrasos: ${money(totals.totalDesc)}</div><div>Descontos extras: ${money(totals.totalExtraDesc)}</div><div>Vales: ${money(totals.totalVales)}</div><div>Vendas de folga (acumuladas): ${money(totals.totalSold)}</div><div>Alimentação (acumulada): ${money(totals.foodAccum)}</div><div style="margin-top:8px" class="total-box">Total líquido: ${money(totals.net)}</div>`;
@@ -346,6 +354,50 @@
       saveStore(store);
       alert('Relatório gerado. Use Imprimir -> Salvar como PDF se desejar PDF.');
     }
+
+    // Nova função: relatório detalhado só dos descontos (separado)
+    function openDiscountDetails(emp, startStr, endStr){
+      const start = new Date(startStr + 'T00:00:00'), end = new Date(endStr + 'T00:00:00');
+      const rec = (store.records[monthKey(start)] && store.records[monthKey(start)][emp.id]) || {};
+      let rows = '';
+      let totalAtrasos = 0, totalExtras = 0;
+      for(let d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
+        const daynum = d.getDate();
+        const r = rec[String(daynum)] || {};
+        const atras = (r.entry && parseMin(r.entry) >= parseMin(store.config.settings.lateLimit)) ? Number(store.config.settings.latePenalty || 0) : 0;
+        const extra = Number(r.descExtra || 0);
+        if(atras > 0){
+          rows += `<tr><td>${daynum}</td><td>Atraso</td><td>R$ ${Number(atras).toFixed(2)}</td><td>-</td></tr>`;
+          totalAtrasos += atras;
+        }
+        if(extra > 0){
+          const reason = (r.descReason || '');
+          rows += `<tr><td>${daynum}</td><td>Desconto Extra</td><td>R$ ${Number(extra).toFixed(2)}</td><td>${escapeHtml(reason)}</td></tr>`;
+          totalExtras += extra;
+        }
+      }
+      if(!rows) rows = `<tr><td colspan="4">Nenhum desconto registrado neste período.</td></tr>`;
+
+      const html = `<html><head><meta charset="utf-8"><title>Detalhes Descontos ${emp.name}</title><link rel="stylesheet" href="style.css"></head><body><div style="padding:20px">
+        <h2>${store.config.empresa}</h2><h3>Detalhes de Descontos: ${emp.name}</h3><div>Período: ${startStr} até ${endStr}</div>
+        <table border="1" cellpadding="6" style="border-collapse:collapse;margin-top:10px;width:100%"><thead><tr><th>Dia</th><th>Tipo</th><th>Valor</th><th>Motivo</th></tr></thead><tbody>
+        ${rows}
+        </tbody></table>
+        <div style="margin-top:12px"><strong>Total atrasos:</strong> ${money(totalAtrasos)}<br><strong>Total descontos extras:</strong> ${money(totalExtras)}<br><strong>Total desconto geral:</strong> ${money(totalAtrasos + totalExtras)}</div>
+        <div style="margin-top:20px" class="creditos">Relatório de descontos gerado por GZS Manager</div>
+        </div></body></html>`;
+
+      const w = window.open('','_blank');
+      w.document.write(html);
+      w.document.close();
+    }
+
+    // helper para escapar texto em HTML
+    function escapeHtml(str){
+      if(!str) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
   }
 
   saveStore(store);
