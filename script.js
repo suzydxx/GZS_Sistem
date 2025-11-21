@@ -2,6 +2,7 @@
   GZS Manager - script.js
   Local system for desktop use. Login: gelozonasul / 1234
   Stores data in localStorage under key 'gzs_manager_v3'
+  Atualização: adiciona "desconto extra" por dia (campo descExtra) e inclui no cálculo e relatório.
 */
 (function(){
   const LS_KEY = 'gzs_manager_v3';
@@ -58,8 +59,9 @@
           const mk = monthKey();
           store.records[mk] = store.records[mk] || {};
           store.records[mk]['e1'] = store.records[mk]['e1'] || {};
-          store.records[mk]['e1']['1'] = { entry:'08:00', lunchOut:'12:00', lunchIn:'13:00', folga:false, sold:false, vale:0 };
-          store.records[mk]['e1']['2'] = { entry:'08:25', lunchOut:'12:00', lunchIn:'13:00', folga:false, sold:false, vale:0 };
+          // incluí descExtra nos defaults
+          store.records[mk]['e1']['1'] = { entry:'08:00', lunchOut:'12:00', lunchIn:'13:00', folga:false, sold:false, vale:0, descExtra:0 };
+          store.records[mk]['e1']['2'] = { entry:'08:25', lunchOut:'12:00', lunchIn:'13:00', folga:false, sold:false, vale:0, descExtra:0 };
           saveStore(store);
           window.location.href = 'painel.html';
         });
@@ -166,9 +168,10 @@
       html += `<button id="btnGenReport" class="btn secondary">Gerar Relatório (abrir/print)</button>`;
       html += `</div>`;
 
-      html += `<table class="table"><thead><tr><th>Dia</th><th>Entrada</th><th>Saída Almoço</th><th>Volta Almoço</th><th>Folga</th><th>Vendeu</th><th>Vales (R$)</th><th>Desconto</th></tr></thead><tbody>`;
+      // Adicionei coluna "Desc. Extra" (input) mantendo td-desc para desconto por atraso
+      html += `<table class="table"><thead><tr><th>Dia</th><th>Entrada</th><th>Saída Almoço</th><th>Volta Almoço</th><th>Folga</th><th>Vendeu</th><th>Vales (R$)</th><th>Desc. Extra (R$)</th><th>Desconto</th></tr></thead><tbody>`;
       for(let d=1; d<=31; d++){
-        const r = rec[String(d)] || {entry:'', lunchOut:'', lunchIn:'', folga:false, sold:false, vale:0};
+        const r = rec[String(d)] || {entry:'', lunchOut:'', lunchIn:'', folga:false, sold:false, vale:0, descExtra:0};
         html += `<tr>
           <td>${d}</td>
           <td><input class="inp-time entry" data-day="${d}" value="${r.entry||''}"></td>
@@ -176,7 +179,8 @@
           <td><input class="inp-time lunchIn" data-day="${d}" value="${r.lunchIn||''}"></td>
           <td style="text-align:center"><input type="checkbox" class="chk-folga" data-day="${d}" ${r.folga? 'checked':''}></td>
           <td style="text-align:center"><input type="checkbox" class="chk-sold" data-day="${d}" ${r.sold? 'checked':''}></td>
-          <td><input class="inp-time vale" data-day="${d}" value="${r.vale||0}" type="number" min="0"></td>
+          <td><input class="inp-time vale" data-day="${d}" value="${r.vale||0}" type="number" min="0" step="0.01"></td>
+          <td><input class="inp-time descExtra" data-day="${d}" value="${r.descExtra||0}" type="number" min="0" step="0.01"></td>
           <td class="td-desc" data-day="${d}">R$ 0,00</td>
         </tr>`;
       }
@@ -197,9 +201,11 @@
 
       el('pointsCard').innerHTML = html;
 
+      // Eventos
       document.querySelectorAll('.inp-time').forEach(i=> i.addEventListener('blur', (e)=> { saveField(emp.id, e.target.dataset.day); }));
       document.querySelectorAll('.chk-folga, .chk-sold').forEach(cb=> cb.addEventListener('change', (e)=> { saveField(emp.id, e.target.dataset.day); }));
       document.querySelectorAll('.vale').forEach(v=> v.addEventListener('change', (e)=> { saveField(emp.id, e.target.dataset.day); }));
+      document.querySelectorAll('.descExtra').forEach(v=> v.addEventListener('change', (e)=> { saveField(emp.id, e.target.dataset.day); }));
 
       el('payType').addEventListener('change', ()=> { emp.payType = el('payType').value; saveStore(store); renderPoints(emp); });
       el('foodMode').addEventListener('change', ()=> { emp.foodMode = el('foodMode').value; saveStore(store); });
@@ -221,12 +227,20 @@
       store.records[mk][empId] = store.records[mk][empId] || {};
       const elEntry = document.querySelector('.entry[data-day="'+day+'"]');
       const entry = elEntry ? elEntry.value.trim() : '';
-      const lunchOut = document.querySelector('.lunchOut[data-day="'+day+'"]').value.trim();
-      const lunchIn = document.querySelector('.lunchIn[data-day="'+day+'"]').value.trim();
-      const folga = document.querySelector('.chk-folga[data-day="'+day+'"]').checked;
-      const sold = document.querySelector('.chk-sold[data-day="'+day+'"]').checked;
-      const vale = Number(document.querySelector('.vale[data-day="'+day+'"]').value) || 0;
-      store.records[mk][empId][String(day)] = { entry, lunchOut, lunchIn, folga, sold, vale };
+      const lunchOutEl = document.querySelector('.lunchOut[data-day="'+day+'"]');
+      const lunchOut = lunchOutEl ? lunchOutEl.value.trim() : '';
+      const lunchInEl = document.querySelector('.lunchIn[data-day="'+day+'"]');
+      const lunchIn = lunchInEl ? lunchInEl.value.trim() : '';
+      const folgaEl = document.querySelector('.chk-folga[data-day="'+day+'"]');
+      const folga = folgaEl ? folgaEl.checked : false;
+      const soldEl = document.querySelector('.chk-sold[data-day="'+day+'"]');
+      const sold = soldEl ? soldEl.checked : false;
+      const valeEl = document.querySelector('.vale[data-day="'+day+'"]');
+      const vale = valeEl ? Number(valeEl.value) || 0 : 0;
+      const descExtraEl = document.querySelector('.descExtra[data-day="'+day+'"]');
+      const descExtra = descExtraEl ? Number(descExtraEl.value) || 0 : 0;
+
+      store.records[mk][empId][String(day)] = { entry, lunchOut, lunchIn, folga, sold, vale, descExtra };
       saveStore(store);
       calcRow(empId, day);
       const p = store.periods[mk] && store.periods[mk][empId] ? store.periods[mk][empId] : null;
@@ -247,9 +261,9 @@
     }
 
     function openPeriodSelector(emp){
-      const start = prompt('Digite data de início (DD-MM-YYYY):');
+      const start = prompt('Digite data de início (YYYY-MM-DD):');
       if(!start) return;
-      const end = prompt('Digite data de fim (DD-MM-YYYY) — para semanal o final deve ser domingo (DD-MM-YYYY):');
+      const end = prompt('Digite data de fim (YYYY-MM-DD) — para semanal o final deve ser domingo (YYYY-MM-DD):');
       if(!end) return;
       const s = new Date(start + 'T00:00:00'), e = new Date(end + 'T00:00:00');
       if(isNaN(s.getTime()) || isNaN(e.getTime())) return alert('Formato de data inválido.');
@@ -268,7 +282,8 @@
       const emp = store.employees.find(e=>e.id===empId);
       const totals = calcTotalsForGivenRange(empId, startStr, endStr);
       el('baseVal').innerText = money(totals.base);
-      el('descVal').innerText = money(totals.totalDesc);
+      // descVal agora inclui soma de penalidades por atraso + descontos extras
+      el('descVal').innerText = money(totals.totalDesc + totals.totalExtraDesc);
       el('valesVal').innerText = money(totals.totalVales);
       el('sellVal').innerText = money(totals.totalSold);
       el('foodVal').innerText = money(totals.foodAccum);
@@ -281,12 +296,13 @@
       const rec = (store.records[monthKey(start)] && store.records[monthKey(start)][empId]) || {};
       const weekly = Number(store.config.settings.weeklySalary) || 350;
       const base = (emp.payType === 'Quinzenal') ? weekly*2 : weekly;
-      let totalVales = 0, totalSold = 0, totalDesc = 0, foodAccum = 0;
+      let totalVales = 0, totalSold = 0, totalDesc = 0, foodAccum = 0, totalExtraDesc = 0;
       for(let d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
         const daynum = d.getDate();
         const r = rec[String(daynum)] || null;
         if(!r) continue;
         if(r.vale) totalVales += Number(r.vale || 0);
+        if(r.descExtra) totalExtraDesc += Number(r.descExtra || 0);
         if(r.sold && emp.sellMode === 'Acumulada') totalSold += Number(store.config.settings.sellDayValue || 0);
         if(r.entry){
           const mm = parseMin(r.entry);
@@ -294,25 +310,27 @@
           if(emp.foodMode === 'Acumulada') foodAccum += Number(store.config.settings.foodPerDay || 0);
         }
       }
-      const net = Math.max(0, base - (totalDesc + totalVales) + totalSold + foodAccum);
-      return { base, totalVales, totalSold, totalDesc, foodAccum, net };
+      // totalDesc = penalidades por atraso; totalExtraDesc é o desconto manual. Ambos descontados.
+      const net = Math.max(0, base - (totalDesc + totalVales + totalExtraDesc) + totalSold + foodAccum);
+      return { base, totalVales, totalSold, totalDesc, totalExtraDesc, foodAccum, net };
     }
 
     function openReport(emp, startStr, endStr, totals){
       let html = `<html><head><meta charset="utf-8"><title>Relatório ${emp.name}</title><link rel="stylesheet" href="style.css"></head><body><div style="padding:20px">`;
       html += `<h2>${store.config.empresa}</h2><h3>Relatório: ${emp.name}</h3>`;
       html += `<div>Período: ${startStr} até ${endStr}</div>`;
-      html += `<table border="1" cellpadding="6" style="border-collapse:collapse;margin-top:10px"><thead><tr><th>Dia</th><th>Entrada</th><th>Saída Almoço</th><th>Volta</th><th>Folga</th><th>Vendeu</th><th>Vales</th><th>Desconto</th></tr></thead><tbody>`;
+      // Cabeçalho com nova coluna "Desc. Extra"
+      html += `<table border="1" cellpadding="6" style="border-collapse:collapse;margin-top:10px"><thead><tr><th>Dia</th><th>Entrada</th><th>Saída Almoço</th><th>Volta</th><th>Folga</th><th>Vendeu</th><th>Vales</th><th>Desc. Extra</th><th>Desconto (Atraso)</th></tr></thead><tbody>`;
       const start = new Date(startStr + 'T00:00:00'), end = new Date(endStr + 'T00:00:00');
       const rec = (store.records[monthKey(start)] && store.records[monthKey(start)][emp.id]) || {};
       for(let d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
         const daynum = d.getDate();
         const r = rec[String(daynum)] || {};
-        const desc = (r.entry && parseMin(r.entry) >= parseMin(store.config.settings.lateLimit)) ? store.config.settings.latePenalty : 0;
-        html += `<tr><td>${daynum}</td><td>${r.entry||''}</td><td>${r.lunchOut||''}</td><td>${r.lunchIn||''}</td><td>${r.folga? 'Sim':''}</td><td>${r.sold? 'Sim':''}</td><td>R$ ${(Number(r.vale||0)).toFixed(2)}</td><td>R$ ${Number(desc).toFixed(2)}</td></tr>`;
+        const descAtraso = (r.entry && parseMin(r.entry) >= parseMin(store.config.settings.lateLimit)) ? store.config.settings.latePenalty : 0;
+        html += `<tr><td>${daynum}</td><td>${r.entry||''}</td><td>${r.lunchOut||''}</td><td>${r.lunchIn||''}</td><td>${r.folga? 'Sim':''}</td><td>${r.sold? 'Sim':''}</td><td>R$ ${(Number(r.vale||0)).toFixed(2)}</td><td>R$ ${(Number(r.descExtra||0)).toFixed(2)}</td><td>R$ ${Number(descAtraso).toFixed(2)}</td></tr>`;
       }
       html += `</tbody></table>`;
-      html += `<h4>Resumo</h4><div>Base: ${money(totals.base)}</div><div>Descontos por atrasos: ${money(totals.totalDesc)}</div><div>Vales: ${money(totals.totalVales)}</div><div>Vendas de folga (acumuladas): ${money(totals.totalSold)}</div><div>Alimentação (acumulada): ${money(totals.foodAccum)}</div><div style="margin-top:8px" class="total-box">Total líquido: ${money(totals.net)}</div>`;
+      html += `<h4>Resumo</h4><div>Base: ${money(totals.base)}</div><div>Descontos por atrasos: ${money(totals.totalDesc)}</div><div>Descontos extras: ${money(totals.totalExtraDesc)}</div><div>Vales: ${money(totals.totalVales)}</div><div>Vendas de folga (acumuladas): ${money(totals.totalSold)}</div><div>Alimentação (acumulada): ${money(totals.foodAccum)}</div><div style="margin-top:8px" class="total-box">Total líquido: ${money(totals.net)}</div>`;
       html += `<div style="margin-top:20px" class="creditos">Desenvolvido por Suzydxx - GZS Manager 2k25</div>`;
       html += `</div></body></html>`;
       const w = window.open('','_blank');
